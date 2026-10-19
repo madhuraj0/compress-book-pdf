@@ -229,13 +229,16 @@
       // Pass 2: Target Size / Max Shrink Budgeting
       const targetMB = parseFloat(targetSizeInput.value) || 10;
       const targetBytes = targetMB * 1024 * 1024;
+      const shouldRunTarget = currentMode === 'target' && finalSize > targetBytes;
+      const shouldRunMax = currentMode === 'max';
+      const shouldRunAutoFallback = currentMode === 'auto' && finalSize > 14 * 1024 * 1024 && (file.size - finalSize) < file.size * 0.15;
 
-      if ((currentMode === 'target' && finalSize > targetBytes) || currentMode === 'max') {
-        updateProgress(80, 'Applying adaptive target size budget...', `Optimizing image streams...`);
+      if (shouldRunTarget || shouldRunMax || shouldRunAutoFallback) {
+        const effectiveTarget = shouldRunAutoFallback ? 12 * 1024 * 1024 : targetBytes;
+        updateProgress(78, 'Applying adaptive target size budget...', `Optimizing image streams to fit ${formatBytes(effectiveTarget)}...`);
         await yieldToBrowser();
 
-        // If target size is still exceeded, downsample over-sized background streams
-        savedBytes = await applyAdaptiveDownsampling(savedBytes, targetBytes, currentMode === 'max');
+        savedBytes = await applyAdaptiveDownsampling(savedBytes, effectiveTarget, shouldRunMax, preserveCovers);
         finalSize = savedBytes.length;
       }
 
@@ -339,47 +342,165 @@
   }
 
   // Adaptive Downsampling Pass for Target Size & Max Shrink
-  async function applyAdaptiveDownsampling(pdfBytes, targetBytes, isMaxShrink) {
-    try {
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-      const objects = pdfDoc.context.enumerateIndirectObjects();
-      const imageObjects = [];
+  async function applyAdaptiveDownsampling(pdfBytes, targetBytes, isMaxShrink, preserveCovers) {
+    if (!window.pdfjsLib) {
+      console.warn('pdf.js unavailable for adaptive rendering');
+      return pdfBytes;
+    }
 
-      // Find all raster image streams
-      for (const [ref, obj] of objects) {
-        if (obj instanceof PDFRawStream || obj instanceof PDFStream) {
-          const dict = obj.dict;
-          const subtype = dict.get(PDFName.of('Subtype'));
-          if (subtype === PDFName.of('Image')) {
-            const width = dict.get(PDFName.of('Width'));
-            const height = dict.get(PDFName.of('Height'));
-            const isMask = dict.get(PDFName.of('ImageMask'));
-            if (!isMask && width && height) {
-              const len = obj.contents ? obj.contents.length : 0;
-              if (len > 8000) {
-                imageObjects.push({ ref, obj, len });
-              }
-            }
+    try {
+      const pdfDoc = await PDFDocument.load(pdfBytes, { parseSpeed: Infinity });
+      const pages = pdfDoc.getPages();
+      const totalPages = pages.length;
+
+      const loadingTask = window.pdfjsLib.getDocument({ data: pdfBytes.slice(0) });
+      const loadedDoc = await loadingTask.promise;
+
+      // Estimate structure overhead (fonts, text, xref) and calculate page budget
+      const overhead = Math.min(2 * 1024 * 1024, Math.max(350 * 1024, totalPages * 3000));
+      const availableImageBudget = isMaxShrink
+        ? (totalPages * 14 * 1024)
+        : Math.max(500 * 1024, targetBytes - overhead);
+      const budgetPerPage = availableImageBudget / totalPages;
+
+      let scale = 1.05;
+      let quality = 0.50;
+
+      if (isMaxShrink) {
+        scale = 0.75;
+        quality = 0.32;
+      } else if (budgetPerPage >= 45 * 1024) {
+        scale = 1.35;
+        quality = 0.65;
+      } else if (budgetPerPage >= 30 * 1024) {
+        scale = 1.20;
+        quality = 0.55;
+      } else if (budgetPerPage >= 20 * 1024) {
+        scale = 1.05;
+        quality = 0.48;
+      } else if (budgetPerPage >= 14 * 1024) {
+        scale = 0.90;
+        quality = 0.40;
+      } else {
+        scale = 0.75;
+        quality = 0.32;
+      }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      // Shared 1x1 transparent dummy mask to silence secondary XObjects
+      const dummyMaskStream = pdfDoc.context.flateStream(new Uint8Array([0x00]), {
+        Type: PDFName.of('XObject'),
+        Subtype: PDFName.of('Image'),
+        Width: 1,
+        Height: 1,
+        BitsPerComponent: 1,
+        ImageMask: PDFBool.True,
+        Decode: [0, 0]
+      });
+      const dummyMaskRef = pdfDoc.context.register(dummyMaskStream);
+
+      for (let i = 0; i < totalPages; i++) {
+        const page = pages[i];
+        const res = page.node.Resources();
+        if (!res) continue;
+
+        const xobj = res.lookup(PDFName.of('XObject'), PDFDict);
+        if (!xobj) continue;
+
+        const entries = xobj.entries();
+        if (entries.length === 0) continue;
+
+        const isCover = preserveCovers && (i === 0 || i === totalPages - 1);
+        const pageScale = isCover ? Math.max(scale, 1.4) : scale;
+        const pageQuality = isCover ? Math.max(quality, 0.8) : quality;
+
+        // Render page with PDF.js
+        const pdfPage = await loadedDoc.getPage(i + 1);
+        const viewport = pdfPage.getViewport({ scale: pageScale });
+
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
+
+        ctx.filter = isCover ? 'none' : 'contrast(106%)';
+
+        await pdfPage.render({
+          canvasContext: ctx,
+          viewport: viewport
+        }).promise;
+
+        // Convert canvas to JPEG
+        const dataUrl = canvas.toDataURL('image/jpeg', pageQuality);
+        const base64Data = dataUrl.substring(dataUrl.indexOf(',') + 1);
+        const binaryStr = atob(base64Data);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let b = 0; b < len; b++) {
+          bytes[b] = binaryStr.charCodeAt(b);
+        }
+
+        // Clean up PDF.js internal page structures
+        pdfPage.cleanup();
+
+        // Embed JPEG in pdfDoc
+        const embeddedImg = await pdfDoc.embedJpg(bytes);
+
+        // Map primary entry to newly compressed JPEG
+        const primaryEntry = entries[0];
+        const primaryName = primaryEntry[0];
+        const primaryOldRef = primaryEntry[1];
+
+        xobj.set(primaryName, embeddedImg.ref);
+
+        if (primaryOldRef instanceof PDFRef) {
+          const oldObj = pdfDoc.context.lookup(primaryOldRef);
+          if (oldObj && (oldObj instanceof PDFStream || oldObj instanceof PDFRawStream)) {
+            const oldSMask = oldObj.dict.get(PDFName.of('SMask'));
+            if (oldSMask instanceof PDFRef) pdfDoc.context.delete(oldSMask);
+            const oldMask = oldObj.dict.get(PDFName.of('Mask'));
+            if (oldMask instanceof PDFRef) pdfDoc.context.delete(oldMask);
           }
+          pdfDoc.context.delete(primaryOldRef);
+        }
+
+        // Map any secondary image XObjects to 1x1 dummy mask
+        for (let k = 1; k < entries.length; k++) {
+          const secEntry = entries[k];
+          const secName = secEntry[0];
+          const secRef = secEntry[1];
+          xobj.set(secName, dummyMaskRef);
+          if (secRef instanceof PDFRef) {
+            const secObj = pdfDoc.context.lookup(secRef);
+            if (secObj && (secObj instanceof PDFStream || secObj instanceof PDFRawStream)) {
+              const secSMask = secObj.dict.get(PDFName.of('SMask'));
+              if (secSMask instanceof PDFRef) pdfDoc.context.delete(secSMask);
+              const secMask = secObj.dict.get(PDFName.of('Mask'));
+              if (secMask instanceof PDFRef) pdfDoc.context.delete(secMask);
+            }
+            pdfDoc.context.delete(secRef);
+          }
+        }
+
+        if (i % 8 === 0 || i === totalPages - 1) {
+          const pct = Math.round(75 + ((i + 1) / totalPages) * 18);
+          updateProgress(
+            pct,
+            `Budgeting target size (${formatBytes(targetBytes)})...`,
+            `Page ${i + 1} of ${totalPages} (${Math.round(((i + 1) / totalPages) * 100)}%)`
+          );
+          await yieldToBrowser();
         }
       }
 
-      // Sort images by size descending
-      imageObjects.sort((a, b) => b.len - a.len);
+      loadedDoc.destroy();
 
-      // Re-compress largest image streams to compact JPEG
-      const budgetNeeded = pdfBytes.length - targetBytes;
-      let reclaimed = 0;
-
-      for (const item of imageObjects) {
-        if (reclaimed >= budgetNeeded && !isMaxShrink) break;
-        // Optimization marker
-        reclaimed += Math.round(item.len * 0.4);
-      }
+      updateProgress(94, 'Writing compact PDF stream...', 'Rebuilding object tree...');
+      await yieldToBrowser();
 
       return await pdfDoc.save({ useObjectStreams: false });
-    } catch (e) {
-      console.warn('Adaptive pass skipped:', e);
+    } catch (err) {
+      console.error('Adaptive downsampling error:', err);
       return pdfBytes;
     }
   }
