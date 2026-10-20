@@ -160,7 +160,7 @@
         const res = page.node.Resources();
         if (!res) continue;
 
-        const xobj = res.lookup(PDFName.of('XObject'), PDFDict);
+        const xobj = res.lookupMaybe(PDFName.of('XObject'), PDFDict);
         if (!xobj) continue;
 
         const entries = xobj.entries();
@@ -424,7 +424,7 @@
         const res = page.node.Resources();
         if (!res) continue;
 
-        const xobj = res.lookup(PDFName.of('XObject'), PDFDict);
+        const xobj = res.lookupMaybe(PDFName.of('XObject'), PDFDict);
         if (!xobj) continue;
 
         const entries = xobj.entries();
