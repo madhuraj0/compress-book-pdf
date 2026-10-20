@@ -34,6 +34,8 @@
   const metaSpeed = document.getElementById('metaSpeed');
   const verificationBadge = document.getElementById('verificationBadge');
   const verificationText = document.getElementById('verificationText');
+  const engineBadge = document.getElementById('engineBadge');
+  const engineText = document.getElementById('engineText');
   const downloadBtn = document.getElementById('downloadBtn');
   const resetBtn = document.getElementById('resetBtn');
 
@@ -226,20 +228,28 @@
       let savedBytes = await pdfDoc.save({ useObjectStreams: false });
       let finalSize = savedBytes.length;
 
-      // Pass 2: Target Size / Max Shrink Budgeting
+      let activeEngine = 'Lossless MRC Stencil Engine';
+
+      // Pass 2: Multi-Engine Adaptive Target Size / Max Shrink Budgeting
       const targetMB = parseFloat(targetSizeInput.value) || 10;
       const targetBytes = targetMB * 1024 * 1024;
       const shouldRunTarget = currentMode === 'target' && finalSize > targetBytes;
       const shouldRunMax = currentMode === 'max';
-      const shouldRunAutoFallback = currentMode === 'auto' && finalSize > 14 * 1024 * 1024 && (file.size - finalSize) < file.size * 0.15;
+      const shouldRunAutoFallback = currentMode === 'auto' && finalSize > 12 * 1024 * 1024;
 
       if (shouldRunTarget || shouldRunMax || shouldRunAutoFallback) {
-        const effectiveTarget = shouldRunAutoFallback ? 12 * 1024 * 1024 : targetBytes;
-        updateProgress(78, 'Applying adaptive target size budget...', `Optimizing image streams to fit ${formatBytes(effectiveTarget)}...`);
+        const effectiveTarget = shouldRunAutoFallback ? 9.5 * 1024 * 1024 : targetBytes;
+        updateProgress(78, 'Applying adaptive target budgeting...', `Optimizing image streams to fit ${formatBytes(effectiveTarget)}...`);
         await yieldToBrowser();
 
-        savedBytes = await applyAdaptiveDownsampling(savedBytes, effectiveTarget, shouldRunMax, preserveCovers);
+        const result = await applyAdaptiveDownsampling(savedBytes, effectiveTarget, shouldRunMax, preserveCovers, inkColor);
+        savedBytes = result.bytes;
         finalSize = savedBytes.length;
+        activeEngine = result.engineName;
+      } else if (currentMode === 'target' && finalSize <= targetBytes) {
+        activeEngine = `Lossless MRC Stencil Engine (Already ≤ ${targetMB} MB)`;
+      } else if (currentMode === 'auto') {
+        activeEngine = 'Smart Auto Lossless MRC Engine';
       }
 
       // Pass 3: Integrity Verification Check
@@ -270,6 +280,11 @@
 
       metaSummary.textContent = `${totalPages} pages processed (${modifiedPages} scan layers deduplicated)`;
       metaSpeed.textContent = `Completed in ${elapsedSec}s`;
+
+      if (engineText && engineBadge) {
+        engineText.textContent = activeEngine;
+        engineBadge.style.display = 'inline-flex';
+      }
 
       if (verificationResult.ok) {
         verificationBadge.style.display = 'inline-flex';
@@ -325,7 +340,7 @@
           str += String.fromCharCode.apply(null, decomp.subarray(k, k + chunk));
         }
 
-        if (str.includes(targetOp)) {
+        if (str.includes(targetOp) && !str.includes(replaceOp)) {
           str = str.replace(new RegExp(targetOp.replace('/', '\\/'), 'g'), replaceOp);
 
           const updatedBytes = new Uint8Array(str.length);
@@ -341,11 +356,11 @@
     }
   }
 
-  // Adaptive Downsampling Pass for Target Size & Max Shrink
-  async function applyAdaptiveDownsampling(pdfBytes, targetBytes, isMaxShrink, preserveCovers) {
+  // Adaptive Multi-Engine Downsampling Pass for Target Size, Max Shrink & Auto Fallback
+  async function applyAdaptiveDownsampling(pdfBytes, targetBytes, isMaxShrink, preserveCovers, inkColor = '0 g') {
     if (!window.pdfjsLib) {
       console.warn('pdf.js unavailable for adaptive rendering');
-      return pdfBytes;
+      return { bytes: pdfBytes, engineName: 'Lossless MRC Stencil Engine' };
     }
 
     try {
@@ -356,35 +371,23 @@
       const loadingTask = window.pdfjsLib.getDocument({ data: pdfBytes.slice(0) });
       const loadedDoc = await loadingTask.promise;
 
-      // Estimate structure overhead (fonts, text, xref) and calculate page budget
-      const overhead = Math.min(2 * 1024 * 1024, Math.max(350 * 1024, totalPages * 3000));
-      const availableImageBudget = isMaxShrink
-        ? (totalPages * 14 * 1024)
-        : Math.max(500 * 1024, targetBytes - overhead);
-      const budgetPerPage = availableImageBudget / totalPages;
+      // Estimate structure overhead and apply 90% budget target to strictly heed target size
+      const overhead = Math.min(1.5 * 1024 * 1024, totalPages * 2200);
+      const safeTargetBudget = isMaxShrink
+        ? (totalPages * 8 * 1024)
+        : Math.max(250 * 1024, (targetBytes * 0.90) - overhead);
+      const budgetPerPage = safeTargetBudget / totalPages;
 
-      let scale = 1.05;
-      let quality = 0.50;
-
-      if (isMaxShrink) {
-        scale = 0.75;
-        quality = 0.32;
-      } else if (budgetPerPage >= 45 * 1024) {
-        scale = 1.35;
-        quality = 0.65;
-      } else if (budgetPerPage >= 30 * 1024) {
-        scale = 1.20;
-        quality = 0.55;
-      } else if (budgetPerPage >= 20 * 1024) {
-        scale = 1.05;
-        quality = 0.48;
-      } else if (budgetPerPage >= 14 * 1024) {
-        scale = 0.90;
-        quality = 0.40;
-      } else {
-        scale = 0.75;
-        quality = 0.32;
-      }
+      // Dynamic scales tuned for 1-bit text vs color photos
+      const stencilScale = isMaxShrink
+        ? 1.15
+        : Math.min(2.2, Math.max(1.0, Math.sqrt(budgetPerPage / (11 * 1024)) * 1.5));
+      const jpegScale = isMaxShrink
+        ? 0.65
+        : Math.min(1.1, Math.max(0.45, Math.sqrt(budgetPerPage / (36 * 1024))));
+      const jpegQuality = isMaxShrink
+        ? 0.28
+        : Math.min(0.70, Math.max(0.28, budgetPerPage / (40 * 1024)));
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -401,6 +404,10 @@
       });
       const dummyMaskRef = pdfDoc.context.register(dummyMaskStream);
 
+      const deadRefs = new Set();
+      let monoPagesCount = 0;
+      let colorPagesCount = 0;
+
       for (let i = 0; i < totalPages; i++) {
         const page = pages[i];
         const res = page.node.Resources();
@@ -413,8 +420,19 @@
         if (entries.length === 0) continue;
 
         const isCover = preserveCovers && (i === 0 || i === totalPages - 1);
-        const pageScale = isCover ? Math.max(scale, 1.4) : scale;
-        const pageQuality = isCover ? Math.max(quality, 0.8) : quality;
+        const pageScale = isCover ? Math.max(stencilScale, 2.0) : stencilScale;
+
+        // Collect all existing image and mask refs on this page for purging
+        for (const [name, ref] of entries) {
+          if (ref instanceof PDFRef) {
+            deadRefs.add(ref);
+            const obj = pdfDoc.context.lookup(ref);
+            if (obj && (obj instanceof PDFStream || obj instanceof PDFRawStream)) {
+              const sm = obj.dict.get(PDFName.of('SMask')) || obj.dict.get(PDFName.of('Mask'));
+              if (sm instanceof PDFRef) deadRefs.add(sm);
+            }
+          }
+        }
 
         // Render page with PDF.js
         const pdfPage = await loadedDoc.getPage(i + 1);
@@ -430,57 +448,81 @@
           viewport: viewport
         }).promise;
 
-        // Convert canvas to JPEG
-        const dataUrl = canvas.toDataURL('image/jpeg', pageQuality);
-        const base64Data = dataUrl.substring(dataUrl.indexOf(',') + 1);
-        const binaryStr = atob(base64Data);
-        const len = binaryStr.length;
-        const bytes = new Uint8Array(len);
-        for (let b = 0; b < len; b++) {
-          bytes[b] = binaryStr.charCodeAt(b);
-        }
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
 
-        // Clean up PDF.js internal page structures
-        pdfPage.cleanup();
-
-        // Embed JPEG in pdfDoc
-        const embeddedImg = await pdfDoc.embedJpg(bytes);
-
-        // Map primary entry to newly compressed JPEG
-        const primaryEntry = entries[0];
-        const primaryName = primaryEntry[0];
-        const primaryOldRef = primaryEntry[1];
-
-        xobj.set(primaryName, embeddedImg.ref);
-
-        if (primaryOldRef instanceof PDFRef) {
-          const oldObj = pdfDoc.context.lookup(primaryOldRef);
-          if (oldObj && (oldObj instanceof PDFStream || oldObj instanceof PDFRawStream)) {
-            const oldSMask = oldObj.dict.get(PDFName.of('SMask'));
-            if (oldSMask instanceof PDFRef) pdfDoc.context.delete(oldSMask);
-            const oldMask = oldObj.dict.get(PDFName.of('Mask'));
-            if (oldMask instanceof PDFRef) pdfDoc.context.delete(oldMask);
+        // Fast Color vs Monochrome Page Classifier
+        // Accounts for aged book paper hue (tan/cream paper: R > G > B)
+        let realColorPixels = 0;
+        const sampleStep = 16;
+        for (let p = 0; p < data.length; p += 4 * sampleStep) {
+          const r = data[p], g = data[p + 1], b = data[p + 2];
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const delta = max - min;
+          if (delta > 85 || (b > g && delta > 25) || (g > r + 15 && delta > 25)) {
+            realColorPixels++;
           }
-          pdfDoc.context.delete(primaryOldRef);
         }
+        const isColor = isCover || ((realColorPixels / (data.length / (4 * sampleStep))) > 0.04);
 
-        // Map any secondary image XObjects to 1x1 dummy mask
-        for (let k = 1; k < entries.length; k++) {
-          const secEntry = entries[k];
-          const secName = secEntry[0];
-          const secRef = secEntry[1];
-          xobj.set(secName, dummyMaskRef);
-          if (secRef instanceof PDFRef) {
-            const secObj = pdfDoc.context.lookup(secRef);
-            if (secObj && (secObj instanceof PDFStream || secObj instanceof PDFRawStream)) {
-              const secSMask = secObj.dict.get(PDFName.of('SMask'));
-              if (secSMask instanceof PDFRef) pdfDoc.context.delete(secSMask);
-              const secMask = secObj.dict.get(PDFName.of('Mask'));
-              if (secMask instanceof PDFRef) pdfDoc.context.delete(secMask);
+        if (isColor) {
+          colorPagesCount++;
+          const dataUrl = canvas.toDataURL('image/jpeg', isCover ? 0.85 : jpegQuality);
+          const base64Data = dataUrl.substring(dataUrl.indexOf(',') + 1);
+          const binaryStr = atob(base64Data);
+          const len = binaryStr.length;
+          const bytes = new Uint8Array(len);
+          for (let b = 0; b < len; b++) {
+            bytes[b] = binaryStr.charCodeAt(b);
+          }
+
+          const embeddedImg = await pdfDoc.embedJpg(bytes);
+          xobj.set(entries[0][0], embeddedImg.ref);
+        } else {
+          monoPagesCount++;
+          // Convert to 1-bit packed binary bitmap (1 = dark text ink, 0 = light paper)
+          const dstW = canvas.width;
+          const dstH = canvas.height;
+          const rowBytes = Math.ceil(dstW / 8);
+          const packed = new Uint8Array(rowBytes * dstH);
+
+          for (let y = 0; y < dstH; y++) {
+            const rowOffset = y * dstW * 4;
+            const dstOffset = y * rowBytes;
+            for (let x = 0; x < dstW; x++) {
+              const p = rowOffset + x * 4;
+              const brightness = (data[p] * 299 + data[p + 1] * 587 + data[p + 2] * 114) / 1000;
+              if (brightness < 145 || data[p + 3] < 128) {
+                packed[dstOffset + (x >> 3)] |= (1 << (7 - (x & 7)));
+              }
             }
-            pdfDoc.context.delete(secRef);
           }
+
+          const maskStream = pdfDoc.context.flateStream(packed, {
+            Type: PDFName.of('XObject'),
+            Subtype: PDFName.of('Image'),
+            Width: dstW,
+            Height: dstH,
+            BitsPerComponent: 1,
+            ImageMask: PDFBool.True,
+            Decode: [0, 1]
+          });
+          const maskRef = pdfDoc.context.register(maskStream);
+          xobj.set(entries[0][0], maskRef);
+
+          // Ensure non-stroking text ink color is injected
+          const targetOp = entries[0][0].asString() + ' Do';
+          const replaceOp = `${inkColor} ${targetOp}`;
+          injectInkColorInStreams(page, pdfDoc, targetOp, replaceOp);
         }
+
+        // Map any secondary image XObjects on this page to 1x1 dummy mask
+        for (let k = 1; k < entries.length; k++) {
+          xobj.set(entries[k][0], dummyMaskRef);
+        }
+
+        pdfPage.cleanup();
 
         if (i % 8 === 0 || i === totalPages - 1) {
           const pct = Math.round(75 + ((i + 1) / totalPages) * 18);
@@ -495,13 +537,23 @@
 
       loadedDoc.destroy();
 
+      // Deep purge all dead image and mask references
+      for (const ref of deadRefs) {
+        pdfDoc.context.delete(ref);
+      }
+
       updateProgress(94, 'Writing compact PDF stream...', 'Rebuilding object tree...');
       await yieldToBrowser();
 
-      return await pdfDoc.save({ useObjectStreams: false });
+      const finalSavedBytes = await pdfDoc.save({ useObjectStreams: false });
+      const engineName = monoPagesCount > 0
+        ? `Bilevel Stencil Optimizer (${monoPagesCount}p) + JPEG Engine (${colorPagesCount}p)`
+        : `Adaptive Continuous-Tone JPEG Engine (${totalPages}p)`;
+
+      return { bytes: finalSavedBytes, engineName };
     } catch (err) {
       console.error('Adaptive downsampling error:', err);
-      return pdfBytes;
+      return { bytes: pdfBytes, engineName: 'Lossless MRC Stencil Engine' };
     }
   }
 
