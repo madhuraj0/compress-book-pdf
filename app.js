@@ -242,7 +242,7 @@
         updateProgress(78, 'Applying adaptive target budgeting...', `Optimizing image streams to fit ${formatBytes(effectiveTarget)}...`);
         await yieldToBrowser();
 
-        const result = await applyAdaptiveDownsampling(savedBytes, effectiveTarget, shouldRunMax, preserveCovers, inkColor);
+        const result = await applyAdaptiveDownsampling(arrayBuffer, effectiveTarget, shouldRunMax, preserveCovers, inkColor);
         savedBytes = result.bytes;
         finalSize = savedBytes.length;
         activeEngine = result.engineName;
@@ -392,7 +392,7 @@
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      // Shared 1x1 transparent dummy mask to silence secondary XObjects
+      // Shared 1x1 fully transparent dummy mask to silence secondary XObjects without painting
       const dummyMaskStream = pdfDoc.context.flateStream(new Uint8Array([0x00]), {
         Type: PDFName.of('XObject'),
         Subtype: PDFName.of('Image'),
@@ -400,9 +400,20 @@
         Height: 1,
         BitsPerComponent: 1,
         ImageMask: PDFBool.True,
-        Decode: [0, 0]
+        Decode: [1, 1] // Decode [1, 1] ensures 0s and 1s are both unpainted (100% transparent)
       });
       const dummyMaskRef = pdfDoc.context.register(dummyMaskStream);
+
+      // Shared 1x1 white paper background for multi-layer scanned pages
+      const whitePaperStream = pdfDoc.context.flateStream(new Uint8Array([255, 255, 255]), {
+        Type: PDFName.of('XObject'),
+        Subtype: PDFName.of('Image'),
+        Width: 1,
+        Height: 1,
+        BitsPerComponent: 8,
+        ColorSpace: PDFName.of('DeviceRGB')
+      });
+      const whitePaperRef = pdfDoc.context.register(whitePaperStream);
 
       const deadRefs = new Set();
       let monoPagesCount = 0;
@@ -479,6 +490,9 @@
 
           const embeddedImg = await pdfDoc.embedJpg(bytes);
           xobj.set(entries[0][0], embeddedImg.ref);
+          for (let k = 1; k < entries.length; k++) {
+            xobj.set(entries[k][0], dummyMaskRef);
+          }
         } else {
           monoPagesCount++;
           // Convert to 1-bit packed binary bitmap (1 = dark text ink, 0 = light paper)
@@ -506,20 +520,27 @@
             Height: dstH,
             BitsPerComponent: 1,
             ImageMask: PDFBool.True,
-            Decode: [0, 1]
+            Decode: [1, 0] // In PDF ImageMask: 0 = unpainted paper, 1 = painted text ink
           });
           const maskRef = pdfDoc.context.register(maskStream);
-          xobj.set(entries[0][0], maskRef);
 
-          // Ensure non-stroking text ink color is injected
-          const targetOp = entries[0][0].asString() + ' Do';
-          const replaceOp = `${inkColor} ${targetOp}`;
-          injectInkColorInStreams(page, pdfDoc, targetOp, replaceOp);
-        }
-
-        // Map any secondary image XObjects on this page to 1x1 dummy mask
-        for (let k = 1; k < entries.length; k++) {
-          xobj.set(entries[k][0], dummyMaskRef);
+          if (entries.length > 1) {
+            // Multi-layer page: background -> white paper, foreground -> text stencil
+            xobj.set(entries[0][0], whitePaperRef);
+            xobj.set(entries[1][0], maskRef);
+            const targetOp = entries[1][0].asString() + ' Do';
+            const replaceOp = `${inkColor} ${targetOp}`;
+            injectInkColorInStreams(page, pdfDoc, targetOp, replaceOp);
+            for (let k = 2; k < entries.length; k++) {
+              xobj.set(entries[k][0], dummyMaskRef);
+            }
+          } else {
+            // Single-layer page: text stencil directly
+            xobj.set(entries[0][0], maskRef);
+            const targetOp = entries[0][0].asString() + ' Do';
+            const replaceOp = `${inkColor} ${targetOp}`;
+            injectInkColorInStreams(page, pdfDoc, targetOp, replaceOp);
+          }
         }
 
         pdfPage.cleanup();
