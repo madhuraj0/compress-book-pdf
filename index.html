@@ -3,10 +3,138 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Compress Book PDF — Fast In-Browser Scanned Book Compressor</title>
-  <meta name="description" content="Smart in-browser compressor for scanned book PDFs. Preserves OCR text, layout, and font legibility.">
-  <link rel="stylesheet" href="style.css">
+  <title>Compress Book PDF Online — Free Scanned Book & MRC Compressor</title>
+  <meta name="description" content="Compress large scanned book PDFs to target sizes (5MB, 8MB, 10MB) directly in your browser. Preserves 100% searchable OCR text with bilevel stencil optimization. 100% free, private, no server uploads.">
+  <meta name="keywords" content="compress book pdf, scanned book pdf compressor, mrc pdf compressor, compress pdf to 10mb, compress pdf target size, shrink scanned pdf, book pdf compressor online, pdf bilevel stencil, kindle pdf compressor">
+  <meta name="author" content="BookPDFSlim">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <link rel="canonical" href="https://madhuraj0.github.io/compress-book-pdf/">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://madhuraj0.github.io/compress-book-pdf/">
+  <meta property="og:title" content="Compress Book PDF Online — Free Scanned Book & MRC Compressor">
+  <meta property="og:description" content="Compress large scanned book PDFs to exact target sizes (5MB, 8MB, 10MB). Preserves 100% OCR text and visual clarity with bilevel stencil optimization. 100% private, zero uploads.">
+  <meta property="og:image" content="https://madhuraj0.github.io/compress-book-pdf/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="BookPDFSlim - Compress Scanned Book PDFs">
+  <meta property="og:site_name" content="BookPDFSlim">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://madhuraj0.github.io/compress-book-pdf/">
+  <meta name="twitter:title" content="Compress Book PDF Online — Free Scanned Book Compressor">
+  <meta name="twitter:description" content="Shrink 400+ page scanned books to 5MB, 8MB, or 10MB target size with 100% OCR text intact. Free, private, client-side.">
+  <meta name="twitter:image" content="https://madhuraj0.github.io/compress-book-pdf/og-image.png">
+
+  <!-- Theme and Icons -->
+  <meta name="theme-color" content="#110f0e">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "@id": "https://madhuraj0.github.io/compress-book-pdf/#app",
+        "name": "BookPDFSlim",
+        "url": "https://madhuraj0.github.io/compress-book-pdf/",
+        "applicationCategory": "UtilityApplication",
+        "operatingSystem": "All (Windows, macOS, Linux, iOS, Android)",
+        "browserRequirements": "Requires HTML5 Canvas and JavaScript",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "description": "Smart in-browser compressor for scanned book PDFs. Preserves 100% OCR text, layout, and visual clarity using bilevel stencil optimization and MRC surgery.",
+        "featureList": [
+          "Bilevel Text Stencil Optimizer",
+          "Lossless MRC Layer Extraction",
+          "Target Size Budgeting (5MB, 8MB, 10MB)",
+          "Max Shrink Mode (80%+ reduction)",
+          "100% Searchable OCR Text & Font Preservation",
+          "Zero Server Uploads (100% Client-Side Privacy)"
+        ]
+      },
+      {
+        "@type": "HowTo",
+        "name": "How to Compress a Scanned Book PDF to a Specific Target Size",
+        "description": "Step-by-step guide to shrink a large scanned book PDF online while preserving OCR text.",
+        "step": [
+          {
+            "@type": "HowToStep",
+            "name": "Choose a Compression Mode",
+            "text": "Select 'Auto' for smart optimization, 'Target Size' to set an exact limit (e.g. 8MB or 10MB), or 'Max Shrink' for maximum reduction."
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Upload Your Book PDF",
+            "text": "Drag and drop your scanned PDF file or tap to browse from your computer or mobile device. Processing happens 100% locally in your browser."
+          },
+          {
+            "@type": "HowToStep",
+            "name": "Download the Optimized Book",
+            "text": "Download your compressed book PDF with crisp font clarity and fully searchable OCR text intact."
+          }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How do I compress a scanned book PDF to a specific target size?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Select the 'Target Size' tab, enter your desired file size in megabytes (e.g., 5MB, 8MB, or 10MB), and drop your PDF. The adaptive budgeting engine automatically calculates the exact DPI and 1-bit stencil resolution per page so the final PDF meets or beats your target."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does this compressor delete or break searchable OCR text?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. BookPDFSlim only re-encodes and deduplicates image layers (scanned paper textures and bitmap masks). All underlying vector OCR text streams (BT/ET operators), font dictionaries, and text positions remain 100% intact and searchable."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why do standard PDF compressors fail on scanned books?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Standard PDF tools treat every page as a full-color continuous-tone JPEG or recompress already-compressed JBIG2 streams into bloated DCT images (~30-50 KB/page). On a 400-page book, this creates an unbreakable 15-20 MB floor. BookPDFSlim uses 1-bit bilevel stencil optimization to compress text pages to 5-10 KB each with razor-sharp glyph edges."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I compress a book PDF for Kindle email delivery?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Amazon Kindle's Send-to-Kindle email limit is 25MB (with 10-15MB recommended for seamless sync). Use the 'Target Size' tab set to 10MB or 'Max Shrink' to easily fit large multi-hundred-page scans into Kindle and e-reader limits."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is my book PDF uploaded to any server?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. BookPDFSlim runs entirely client-side inside your browser using pdf-lib, pako, and pdf.js. Your document never leaves your device and is never transmitted over the internet."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <div class="app-wrap">
@@ -143,6 +271,98 @@
             <button id="resetBtn" class="btn btn-secondary">Compress Another</button>
           </div>
         </div>
+      </section>
+      <!-- Comprehensive Educational & SEO Content Guide -->
+      <section class="seo-guide" aria-label="Book PDF Compression Guide">
+        <article class="guide-card">
+          <h2>Why Scanned Books Need a Specialized PDF Compressor</h2>
+          <p>
+            Standard online PDF compressors were designed for digital office documents with simple text and occasional photos. When applied to <strong>scanned books</strong>, they often produce bloated files (15–30 MB for a 400-page volume) or destroy text legibility with blurry JPEG compression artifacts.
+          </p>
+
+          <div class="comparison-grid">
+            <div class="comp-box bad">
+              <h3>Standard PDF Compressors</h3>
+              <ul>
+                <li>❌ Converts text scans to 24-bit JPEGs (~30–50 KB/page)</li>
+                <li>❌ Blurs serif fonts and creates noisy halo artifacts around letters</li>
+                <li>❌ Often flattens and strips out searchable OCR text streams</li>
+                <li>❌ Stalls or crashes on books exceeding 300+ pages</li>
+              </ul>
+            </div>
+            <div class="comp-box good">
+              <h3>BookPDFSlim (Multi-Engine)</h3>
+              <ul>
+                <li>✓ Separates Mixed Raster Content (MRC) text from background paper</li>
+                <li>✓ 1-Bit Bilevel Stencil Optimizer shrinks pages to <strong>5–10 KB</strong></li>
+                <li>✓ Keeps <strong>100% of OCR text</strong> and page dimensions intact</li>
+                <li>✓ 100% In-Browser: zero uploads, complete privacy</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <article class="guide-card">
+          <h2>Compression Engines Built for Books</h2>
+          <div class="features-list">
+            <div class="feature-item">
+              <h4>🎯 Target Size Engine</h4>
+              <p>Budget your book to fit exact byte limits (5 MB, 8 MB, 10 MB, or 12 MB). The adaptive scaler dynamically calculates page resolution to ensure the output strictly meets your threshold.</p>
+            </div>
+            <div class="feature-item">
+              <h4>⚡ Max Shrink Profile</h4>
+              <p>Achieve 80%+ file size reductions for archival storage and mobile e-readers with aggressive 1-bit bilevel text quantization.</p>
+            </div>
+            <div class="feature-item">
+              <h4>✨ Lossless MRC Stencil Surgery</h4>
+              <p>Deduplicates bloated background scans and extracts high-resolution JBIG2 text masks without resampling a single pixel.</p>
+            </div>
+            <div class="feature-item">
+              <h4>🎨 Adaptive Color Classifier</h4>
+              <p>Automatically discerns aged/tan book paper from color front covers and photographic plates, ensuring covers stay vibrant and text stays crisp.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="guide-card">
+          <h2>Optimized for All E-Readers</h2>
+          <div class="device-grid">
+            <div class="device-card">
+              <h4>Amazon Kindle</h4>
+              <p>Effortlessly pass the <strong>25 MB Send-to-Kindle</strong> limit. Eliminates page-turn lag on Paperwhite and Oasis models.</p>
+            </div>
+            <div class="device-card">
+              <h4>Kobo & reMarkable</h4>
+              <p>High-contrast monochrome text rendering optimized specifically for E-Ink screen refresh rates and lower memory devices.</p>
+            </div>
+            <div class="device-card">
+              <h4>Tablets & Phones</h4>
+              <p>Lightweight PDF streams load instantly in Apple Books, Google Play Books, Moon+ Reader, and Android PDF viewers.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="guide-card">
+          <h2>Frequently Asked Questions</h2>
+          <div class="faq-list">
+            <details class="faq-item">
+              <summary>How do I compress a book PDF to a specific target size (e.g. 10MB)?</summary>
+              <p>Click the <strong>Target Size</strong> tab at the top, choose a preset (8MB, 10MB, 12MB) or type your exact limit, and drop your book. The engine automatically budgets DPI and stream compression per page to hit your target.</p>
+            </details>
+            <details class="faq-item">
+              <summary>Will my searchable OCR text remain intact?</summary>
+              <p>Yes. BookPDFSlim only compresses image and mask XObjects. All invisible OCR text layers (created by ABBYY, Tesseract, Adobe Acrobat, or Google Books) remain completely searchable and selectable.</p>
+            </details>
+            <details class="faq-item">
+              <summary>Is it safe to upload confidential books or personal scans?</summary>
+              <p>Your documents are never uploaded to any server. All processing runs locally inside your browser sandbox using WebAssembly and client-side JavaScript. Disconnecting your internet after loading the page will not affect compression.</p>
+            </details>
+            <details class="faq-item">
+              <summary>Why do other compressors make scanned books so blurry?</summary>
+              <p>Most compressors apply lossy JPEG compression across the entire page, which introduces compression ringing and fuzzy edges around black letter glyphs. BookPDFSlim converts text to binary 1-bit stencils, ensuring razor-sharp edges identical to vector type.</p>
+            </details>
+          </div>
+        </article>
       </section>
     </main>
 

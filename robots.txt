@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://madhuraj0.github.io/compress-book-pdf/sitemap.xml
